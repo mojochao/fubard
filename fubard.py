@@ -4,24 +4,22 @@ This package provides boilerplate for a Python command line application with
 flexible configuration capabilities, action dispatching, error reporting, and
 packaging support.
 
-To create a new application named YOURAPPNAME:
-- edit README.rst to reflect your application
-- edit requirements.txt to reflect your application's dependencies
-- edit setup.py to reflect your application's module and dependencies
-- move fubard.py to YOURAPPNAME.py and edit to reflect your application's functionality
-
 This package requires Python >= 2.7.
 
 This package provides a small number of classes:
-- :class:`fubard.Options` class responsible for managing application options
+
 - :class:`fubard.Error` class responsible for reporting application errors
+- :class:`fubard.Options` class responsible for managing application options
 
 This package also provides a small number of functions:
-- :func:`fubard.main` function used as an application entrypoint
-- :func:`fubard.message` function used to message the application user
-- :func:`fubard.get_parser` function used to access application command line parser
-- :func:`fubard.get_action_and_options` function used to access application action and options
-- :func:`fubard.do` function used to dispatch application actions with options
+
+- :func:`fubard.main` function used as an application entrypoint by setup.py
+- :func:`fubard.message` function used by application to message user
+- :func:`fubard.get_parser` function used by application to parse command line for action and options
+- :func:`fubard.get_action_and_options` function used to get application action and options
+- :func:`fubard.do` function used to dispatch application action with options
+
+Search for 'STEP-*' for customization steps.
 
 """
 
@@ -36,7 +34,7 @@ import textwrap
 import commentjson
 import tabulate
 
-# module metadata
+# STEP-1: update application metadata
 APP_NAME = __name__
 APP_VERSION = '1.0.0'
 APP_DESCRIPTION = 'Fractionally Useful Boilerplate Application for Rapid Development.'
@@ -47,23 +45,6 @@ APP_MAINTAINER_EMAIL = APP_AUTHOR_EMAIL
 
 #: Module user messaging may be expanded to include verbose output when configured with the 'verbose' boolean option
 VERBOSE = False
-
-
-def message(messages, verbose=False):
-    """Writes *message* to console stdout.
-
-    :param messages: messages to write
-    :type messages: str
-
-    :param verbose: only write if verbose option is enabled
-    :type verbose: bool
-
-    """
-    if verbose and not VERBOSE:
-        return
-    if not isinstance(messages, list):
-        messages = [messages]
-    [print(m) for m in messages]
 
 
 def main():
@@ -85,6 +66,23 @@ def main():
     return exit_code
 
 
+def message(messages, verbose=False):
+    """Writes *message* to console stdout.
+
+    :param messages: messages to write
+    :type messages: str
+
+    :param verbose: only write if verbose option is enabled
+    :type verbose: bool
+
+    """
+    if verbose and not VERBOSE:
+        return
+    if not isinstance(messages, list):
+        messages = [messages]
+    [print(m) for m in messages]
+
+
 def get_parser():
     """Returns application command line parser.
 
@@ -92,16 +90,6 @@ def get_parser():
     :rtype: :class:`argparse.ArgumentParser` object
 
     """
-    def _add_build_arguments(parser_):
-        parser_.add_argument('--sku', help='build sku')
-        parser_.add_argument('--platform', help='build platform')
-        parser_.add_argument('--environment', help='build environment')
-        parser_.add_argument('--buildnum', help='build number')
-
-    def _add_s3_arguments(parser_):
-        parser_.add_argument('--s3access', help='aws s3 access key')
-        parser_.add_argument('--s3secret', help='aws s3 secret key')
-
     # Create parser and add all common arguments.
     parser = argparse.ArgumentParser(description=APP_DESCRIPTION)
     parser.add_argument('-v', '--verbose', help='increase output verbosity', action='store_true')
@@ -110,70 +98,16 @@ def get_parser():
     # Add actions sub-parser.
     subparsers = parser.add_subparsers(title='available actions')
 
-    # Add 'activate' action.
-    activate_parser = subparsers.add_parser('activate', help='activate a deployed build')
-    activate_parser.set_defaults(action='activate')
-    _add_build_arguments(activate_parser)
+    # STEP-2: add your own actions before returning the parser
 
-    # Add 'activated' action.
-    activated_parser = subparsers.add_parser('activated', help='display activated build')
-    activated_parser.set_defaults(action='activated')
+    # Add 'foo' action.
+    foo_parser = subparsers.add_parser('foo', help='perform a foo action')
+    foo_parser.set_defaults(action='foo')
 
-    # Add 'archived' action.
-    archived_parser = subparsers.add_parser('archived', help='list archived builds')
-    archived_parser.set_defaults(action='archived')
-    archived_parser.add_argument('-a', '--archives', help='archives server url')
-
-    # Add 'cache' action.
-    cache_parser = subparsers.add_parser('cache', help='cache an archived build')
-    cache_parser.set_defaults(action='cache')
-    _add_build_arguments(cache_parser)
-
-    # Add 'cached' action.
-    cached_parser = subparsers.add_parser('cached', help='list cached builds')
-    cached_parser.set_defaults(action='cached')
-
-    # Add 'clean' action.
-    clean_parser = subparsers.add_parser('clean', help='clean a cached build')
-    clean_parser.set_defaults(action='clean')
-    _add_build_arguments(clean_parser)
-
-    # Add 'configure' action.
-    configure_parser = subparsers.add_parser('configure', help='edit a persistent configuration')
-    configure_parser.set_defaults(action='configure')
-    configure_parser.add_argument('-e', '--editor', help='editor to use')
-    configure_parser.add_argument('-g', '--global', help='edit global configuration', action='store_true')
-
-    # Add 'deploy' action.
-    deploy_parser = subparsers.add_parser('deploy', help='deploy a cached build')
-    deploy_parser.set_defaults(action='deploy')
-    _add_build_arguments(deploy_parser)
-    _add_s3_arguments(deploy_parser)
-
-    # Add 'deployed' action.
-    deployed_parser = subparsers.add_parser('deployed', help='list deployed builds')
-    deployed_parser.set_defaults(action='deployed')
-    _add_s3_arguments(deployed_parser)
-
-    # Add 'version' action.
-    version_parser = subparsers.add_parser('version', help='display version information')
-    version_parser.set_defaults(action='version')
-
-    # Add 'options' action.
-    options_parser = subparsers.add_parser('options', help='display options')
-    options_parser.set_defaults(action='options')
-
-    # Add 'skus' action.
-    skus_parser = subparsers.add_parser('skus', help='display valid skus')
-    skus_parser.set_defaults(action='skus')
-
-    # Add 'platforms' action.
-    platforms_parser = subparsers.add_parser('platforms', help='display valid platforms')
-    platforms_parser.set_defaults(action='platforms')
-
-    # Add 'environments' action.
-    environments_parser = subparsers.add_parser('environments', help='display valid environments')
-    environments_parser.set_defaults(action='environments')
+    # Add 'bar' action.
+    archived_parser = subparsers.add_parser('bar', help="demo 'bar' action")
+    archived_parser.set_defaults(action='bar')
+    archived_parser.add_argument('-b', '--with_baz', help="demo 'baz' option")
 
     return parser
 
@@ -215,9 +149,11 @@ def do(action, options):
         VERBOSE = options['verbose']
     _ACTIONS[action](options)
 
+# STEP-3: add action handler functions
+
 
 def _do_foo(_):
-    """Performs 'foo' action with *options."""
+    """Performs 'foo' action."""
     message('performing foo')
 
 
@@ -230,12 +166,49 @@ def _do_bar(options):
     """
     message('performing bar with baz {}'.format(options.values['baz']))
 
+# STEP-4: add action handlers to actions registry
 
-# Valid app actions and their handlers.
+#: Valid app actions and their handlers.
 _ACTIONS = {
     'foo': _do_foo,
     'bar': _do_bar
 }
+
+
+class Error(Exception):
+    """Application error class."""
+
+    def __init__(self, category, brief, details=None):
+        """Initializes new Error object.
+
+        :param category: error category
+        :type category: str
+
+        :param brief: brief error message
+        :type brief: str
+
+        :param details: detailed error messages
+        :type details: [str]
+
+        """
+        self.category = category
+        self.brief = brief
+        self.details = [] if details is None else details
+
+    @property
+    def text(self):
+        """Error text property.
+
+        :returns: error text
+        :rtype: str
+
+        """
+        result = '{} error: {}\n'.format(self.category, self.brief)
+        for detail in self.details:
+            result += '\n'
+            result += '\n'.join(textwrap.wrap(detail, initial_indent=' '*2))
+        result += '\n'
+        return result
 
 
 class Options(object):
@@ -243,7 +216,7 @@ class Options(object):
 
     Applications utilize flexible configuration options.  The first option is to
     load all options from a single, specific options file.  The second option
-    is to load and update options from multiple sources.
+    is to load and update options from multiple sources:
 
     - default options
     - found persistent options
@@ -257,12 +230,16 @@ class Options(object):
     #: Options may be persisted in options files.
     OPTIONS_FILE_NAME = '.{}.json'.format(APP_NAME)
 
+    # STEP-5: update options file text
+
     #: Options file text for new options files.
     OPTIONS_FILE_TEXT = """// fubard configuration. Uncomment and edit as desired.
     {
     //"verbose": false
     }
     """
+
+    # STEP-6: update default options
 
     #: Default options.
     DEFAULT_OPTIONS = {
@@ -510,27 +487,6 @@ class Options(object):
         for k, v in new.items():
             if v is not None:
                 options[k] = v
-
-
-class Error(Exception):
-    """Application error abstract base class."""
-
-    def __init__(self, category, brief, details=None):
-        self.category = category
-        self.brief = brief
-        self.details = [] if details is None else details
-
-    def __str__(self):
-        return '{} error: {}'.format(self.category, self.brief)
-
-    @property
-    def text(self):
-        result = '{} error: {}\n'.format(self.category, self.brief)
-        for detail in self.details:
-            result += '\n'
-            result += '\n'.join(textwrap.wrap(detail, initial_indent=' '*2))
-        result += '\n'
-        return result
 
 
 if __name__ == '__main__':
