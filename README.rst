@@ -12,6 +12,7 @@ Usage
 =====
 
 To create a new application named YOURAPPNAME:
+
 - clone this repository with 'git@github.com:mojochao/fubard.git YOURAPPNAME' command
 - move to your boilerplate project source with 'cd YOURAPPNAME' command
 - edit README.rst to reflect your application
