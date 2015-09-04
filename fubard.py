@@ -35,6 +35,7 @@ import commentjson
 import tabulate
 
 # STEP-1: update application metadata
+
 APP_NAME = __name__
 APP_VERSION = '1.0.0'
 APP_DESCRIPTION = 'Fractionally Useful Boilerplate Application for Rapid Development.'
@@ -101,7 +102,7 @@ def get_parser():
     # STEP-2: add your own actions before returning the parser
 
     # Add 'foo' action.
-    foo_parser = subparsers.add_parser('foo', help='perform a foo action')
+    foo_parser = subparsers.add_parser('foo', help="demo 'foo' action")
     foo_parser.set_defaults(action='foo')
 
     # Add 'bar' action.
@@ -149,7 +150,45 @@ def do(action, options):
         VERBOSE = options['verbose']
     _ACTIONS[action](options)
 
-# STEP-3: add action handler functions
+
+def _do_configure(options):
+    """Configure action handler.
+
+    Edits a persistent configuration, creating it on demand.
+
+    :param options: action options
+    :type options: {str:str}
+
+    """
+    editor = options.values['editor'] if 'editor' in options.values else None
+    edit_global = 'global' in options.values and options.values['global']
+    Options.edit_options_file(editor=editor, edit_global=edit_global)
+
+
+def _do_options(options):
+    """Options action handler.
+
+    Displays app options.
+
+    :param options: action options
+    :type options: {str:str}
+
+    """
+    table = sorted(options.items())
+    headers = ['option', 'value']
+    message(tabulate.tabulate(table, headers, tablefmt='psql'))
+
+
+def _do_version(_):
+    """Version action handler.
+
+    Displays app version information.
+
+    """
+    message('{}-{}'.format(APP_NAME, APP_VERSION))
+
+
+# STEP-3: replace example action handler functions with your own
 
 
 def _do_foo(_):
@@ -166,10 +205,14 @@ def _do_bar(options):
     """
     message('performing bar with baz {}'.format(options.values['baz']))
 
-# STEP-4: add action handlers to actions registry
-
 #: Valid app actions and their handlers.
 _ACTIONS = {
+    'configure': _do_configure,
+    'options': _do_options,
+    'version': _do_version,
+
+    # STEP-4: replace example action handlers in actions registry with your own
+
     'foo': _do_foo,
     'bar': _do_bar
 }
