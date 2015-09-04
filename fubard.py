@@ -1,7 +1,14 @@
 """Fractionally Useful Boilerplate Application for Rapid Development.
 
-This package boilerplate for a Python command line application with
-flexible configuration capabilities with packaging support.
+This package provides boilerplate for a Python command line application with
+flexible configuration capabilities, action dispatching, error reporting, and
+packaging support.
+
+To create a new application named YOURAPPNAME:
+- edit README.rst to reflect your application
+- edit requirements.txt to reflect your application's dependencies
+- edit setup.py to reflect your application's module and dependencies
+- move fubard.py to YOURAPPNAME.py and edit to reflect your application's functionality
 
 This package requires Python >= 2.7.
 
