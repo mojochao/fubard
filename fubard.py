@@ -15,13 +15,15 @@ This package also provides a small number of functions:
 
 - :func:`fubard.main` function used as an application entrypoint by setup.py
 - :func:`fubard.message` function used by application to message user
+- :func:`fubard.register_action` function used to add an action to the application actions registry
+- :func:`fubard.register_option` function used to add an option to the application options registry
 - :func:`fubard.get_parser` function used by application to parse command line for action and options
 - :func:`fubard.get_action_and_options` function used to get application action and options
-- :func:`fubard.do` function used to dispatch application action with options
-
-Search for 'STEP-*' for customization steps.
+- :func:`fubard.dispatch_action_and_options` function used to dispatch application action with options
 
 """
+
+# STEP-0: Update the module docstring at top of this file to reflect your application.
 
 # standard modules
 from __future__ import print_function
@@ -29,27 +31,52 @@ import argparse
 import os
 import subprocess
 import textwrap
+import sys
 
 # vendor modules
 import commentjson
 import tabulate
 
-# STEP-1: update application metadata
+# STEP-1: Update application metadata.
 
-APP_NAME = __name__
-APP_VERSION = '1.0.0'
-APP_DESCRIPTION = 'Fractionally Useful Boilerplate Application for Rapid Development.'
-APP_AUTHOR = 'Allen Gooch'
-APP_AUTHOR_EMAIL = 'allen.gooch@gmail.com'
-APP_MAINTAINER = APP_AUTHOR
-APP_MAINTAINER_EMAIL = APP_AUTHOR_EMAIL
+METADATA = {
+    'name': __name__,
+    'version': '1.0.0',
+    'description': 'Fractionally Useful Boilerplate Application for Rapid Development.',
+    'author': 'John Doe',
+    'author_email': 'john.doe@nonesuch.com',
+    'maintainer': 'Jane Doe',
+    'maintainer_email': 'jane.doe@nonesuch.com'
+}
 
-#: Module user messaging may be expanded to include verbose output when configured with the 'verbose' boolean option
+# STEP-2: Append new options defaults as needed.
+
+DEFAULT_OPTIONS = {
+    'verbose': False
+}
+
+# STEP-3: Append new configuration file text as needed.
+
+####################################################################################
+# BOILERPLATE-BEGIN: Everything from here to BOILERPLATE-END should be off limits. #
+####################################################################################
+
+CONFIGURATION_JSON_TEXT = '''{
+// "verbose": false
+}'''
+
+#: Application user messaging verbosity enabled.
 VERBOSE = False
+
+#: Application actions registry.  It's a list to provide ordering of additions.
+ACTIONS_REGISTRY = []
+
+# Application options registry.  It's a list to provide ordering of additions.
+OPTIONS_REGISTRY = []
 
 
 def main():
-    """Module main function.
+    """Module main function used as an application entrypoint.
 
     :returns: process exit code returned to shell
     :rtype: int
@@ -59,7 +86,7 @@ def main():
         action, options = get_action_and_options()
         if not action:
             raise Error('usage', 'missing action')
-        do(action, options)
+        dispatch_action_and_options(action, options)
         exit_code = 0
     except Error as error:
         message(error.text)
@@ -84,6 +111,47 @@ def message(messages, verbose=False):
     [print(m) for m in messages]
 
 
+def register_action(name, func, desc, options=None):
+    """Adds application action to actions registry.
+
+    :param name: action name
+    :type name: str
+
+    :param func: action handler function or function name
+    :type func: func|str
+
+    :param desc: action description
+    :type desc: str
+
+    :param options: action options metadata
+    :type options: [{str:str}]
+
+    """
+    exists = [action for action in ACTIONS_REGISTRY if action[0] == name]
+    if exists:
+        return ValueError("action '{}' already added".format(name))
+    ACTIONS_REGISTRY.append((name, func, desc, options))
+
+
+def register_option(name, *args, **kwargs):
+    """Adds application action to actions registry.
+
+    :param name: option name
+    :type name: str
+
+    :param args: positional args passed to argparse
+    :type args: [str]
+
+    :param kwargs: keyword args passed to argparse
+    :type kwargs: {str:str}
+
+    """
+    exists = [option for option in OPTIONS_REGISTRY if option[0] == name]
+    if exists:
+        return ValueError("option '{}' already added".format(name))
+    OPTIONS_REGISTRY.append((name, args, kwargs))
+
+
 def get_parser():
     """Returns application command line parser.
 
@@ -91,25 +159,12 @@ def get_parser():
     :rtype: :class:`argparse.ArgumentParser` object
 
     """
-    # Create parser and add all common arguments.
-    parser = argparse.ArgumentParser(description=APP_DESCRIPTION)
-    parser.add_argument('-v', '--verbose', help='increase output verbosity', action='store_true')
-    parser.add_argument('-c', '--configuration', help="configuration file to use for options", metavar='FILE')
-
-    # Add actions sub-parser.
+    parser = argparse.ArgumentParser(description=METADATA['description'])
+    for name, args, kwargs in OPTIONS_REGISTRY:
+        parser.add_argument(args, kwargs)
     subparsers = parser.add_subparsers(title='available actions')
-
-    # STEP-2: add your own actions before returning the parser
-
-    # Add 'foo' action.
-    foo_parser = subparsers.add_parser('foo', help="demo 'foo' action")
-    foo_parser.set_defaults(action='foo')
-
-    # Add 'bar' action.
-    archived_parser = subparsers.add_parser('bar', help="demo 'bar' action")
-    archived_parser.set_defaults(action='bar')
-    archived_parser.add_argument('-b', '--with_baz', help="demo 'baz' option")
-
+    for name, func, desc in ACTIONS_REGISTRY:
+        subparsers.add_parser(name, help=desc)
     return parser
 
 
@@ -125,14 +180,18 @@ def get_action_and_options():
     """
     parser = get_parser()
     args = vars(parser.parse_args())
+
     action = args['action']
+    del args['action']
+
     configuration = args['configuration']
     options = Options(args, configuration)
+
     return action, options
 
 
-def do(action, options):
-    """Performs *action* with *options*.
+def dispatch_action_and_options(action, options):
+    """Dispatches *action* with *options*.
 
     :param action: action name
     :type action: str
@@ -140,15 +199,17 @@ def do(action, options):
     :param options: action options
     :type options: {str:str}
 
-    :raises: :class:`fubard.Error`
-
     """
-    if action not in _ACTIONS:
+    found = [item for item in ACTIONS_REGISTRY if item[0] == action]
+    if not found:
         raise Error('usage', 'unknown action: {}'.format(action))
     if 'verbose' in options:
         global VERBOSE
         VERBOSE = options['verbose']
-    _ACTIONS[action](options)
+    action = found[1]
+    if isinstance(action, basestring):
+        action = globals()[action]
+    action(options)
 
 
 def _do_configure(options):
@@ -185,37 +246,7 @@ def _do_version(_):
     Displays app version information.
 
     """
-    message('{}-{}'.format(APP_NAME, APP_VERSION))
-
-
-# STEP-3: replace example action handler functions with your own
-
-
-def _do_foo(_):
-    """Performs 'foo' action."""
-    message('performing foo')
-
-
-def _do_bar(options):
-    """Performs 'bar' action with *options.
-
-    :param options: action options
-    :type options: {str:str}
-
-    """
-    message('performing bar with baz {}'.format(options.values['baz']))
-
-#: Valid app actions and their handlers.
-_ACTIONS = {
-    'configure': _do_configure,
-    'options': _do_options,
-    'version': _do_version,
-
-    # STEP-4: replace example action handlers in actions registry with your own
-
-    'foo': _do_foo,
-    'bar': _do_bar
-}
+    message('{}-{}'.format(METADATA['name'], METADATA['version']))
 
 
 class Error(Exception):
@@ -271,23 +302,7 @@ class Options(object):
     """
 
     #: Options may be persisted in options files.
-    OPTIONS_FILE_NAME = '.{}.json'.format(APP_NAME)
-
-    # STEP-5: update options file text
-
-    #: Options file text for new options files.
-    OPTIONS_FILE_TEXT = """// fubard configuration. Uncomment and edit as desired.
-    {
-    //"verbose": false
-    }
-    """
-
-    # STEP-6: update default options
-
-    #: Default options.
-    DEFAULT_OPTIONS = {
-        'verbose': False
-    }
+    OPTIONS_FILE_NAME = '.{}.json'.format(__name__)
 
     #: Default text editor
     DEFAULT_EDITOR = os.environ['EDITOR'] if 'EDITOR' in os.environ else 'vi'
@@ -343,6 +358,7 @@ class Options(object):
                 self._values = Options.load_options_file(self._options_file)
             else:
                 options = self.defaults
+                Options.update_options(options, self.user)
                 Options.update_options(options, self.persistent)
                 Options.update_options(options, self.args)
                 self._values = {k: v for k, v in options.items() if v is not None}
@@ -361,6 +377,7 @@ class Options(object):
                 self._sources = {k: self._options_file for k in self.values.keys()}
             else:
                 sources = {k: 'default' for k in self.defaults.keys()}
+                sources.update({k: 'user' for k in self.user.keys()})
                 sources.update({k: self.persistent_options_file for k, v in self.persistent.items() if v is not None})
                 sources.update({k: 'arg' for k, v in self.args.items() if v is not None})
                 self._sources = sources
@@ -374,7 +391,7 @@ class Options(object):
         :rtype: {str:str}
 
         """
-        return dict(Options.DEFAULT_OPTIONS)
+        return dict(DEFAULT_OPTIONS)
 
     @property
     def args(self):
@@ -434,7 +451,7 @@ class Options(object):
         """
         if not os.path.exists(path):
             with open(path, 'w') as outfile:
-                outfile.write(Options.OPTIONS_FILE_TEXT)
+                outfile.write(CONFIGURATION_JSON_TEXT)
             message('created new configuration: {}'.format(path), verbose=True)
 
     @staticmethod
@@ -532,6 +549,33 @@ class Options(object):
                 options[k] = v
 
 
+# Add boilerplate application actions and options
+register_action('configure', 'do_configure', 'create or edit configuration file', [
+            ('user', ['-u', '--user'], {'help': 'create or edit user configuration file'}),
+            ('file', ['-f', '--file'], {'help': 'create or edit specified configuration file'})])
+register_action('options', 'do_options', 'view options information')
+register_action('version', 'do_version', 'view version information')
+
+register_option('verbose', ['-v', '--version'], {'help': 'enable verbose output', 'action': 'store_true'})
+register_option('configuration', ['-c', '--configuration'], {'help': 'configuration file to use', 'metavar': 'FILE'})
+
 if __name__ == '__main__':
-    import sys
     sys.exit(main())
+
+################################################################################
+# BOILERPLATE-END: Everything your own application needs should go below here. #
+################################################################################
+
+# STEP-4: Replace the action handler functions below with those needed by your application
+
+def _do_foo(_):
+    message("doing foo action")
+
+def _do_bar(options):
+    message("doing bar action with baz option '{}'".format(options.values['baz']))
+
+# STEP-5: Replace the register actions and options below with those needed by your application.
+
+register_action('foo', _do_foo, "demonstrate a 'foo' action")
+register_action('bar', '_do_bar', "demonstrate a 'bar' action", [
+            ('baz', ['-z', '--baz'], {'help': "demonstrate a 'bar' action 'baz' option"})])

@@ -1,19 +1,18 @@
 from setuptools import setup
-from fubard import APP_NAME, APP_VERSION, APP_DESCRIPTION, APP_AUTHOR, \
-    APP_AUTHOR_EMAIL, APP_MAINTAINER, APP_MAINTAINER_EMAIL
+from fubard import METADATA
 
 setup(
-    name=APP_NAME,
-    version=APP_VERSION,
-    description=APP_DESCRIPTION,
-    author=APP_AUTHOR,
-    author_email=APP_AUTHOR_EMAIL,
-    maintainer=APP_MAINTAINER,
-    maintainer_email=APP_MAINTAINER_EMAIL,
+    name=METADATA['name'],
+    version=METADATA['version'],
+    description=METADATA['description'],
+    author=METADATA['author'],
+    author_email=METADATA['author_email'],
+    maintainer=METADATA['maintainer'],
+    maintainer_email=METADATA['maintainer_email'],
     py_modules=['fubard'],
     install_requires=[
-        'commentjson',     # for JSON processing
-        'tabulate'         # for table printing
+        'commentjson',
+        'tabulate'
     ],
     entry_points={
         'console_scripts': [
