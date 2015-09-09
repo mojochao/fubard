@@ -61,7 +61,7 @@ A minimal, yet complete, example of this might look like the following:
             message('Hello, {}'.format(others[0]))
 
     def main():
-        return FooBarApp().run()
+        return FooBarApp(METADATA).run()
 
     if __name__ == '__main__':
         sys.exit(main())
@@ -86,7 +86,7 @@ import tabulate
 METADATA = {
     'name': __name__,
     'version': '1.0.0',
-    'description': 'Demonstration b Application',
+    'description': 'Fractionally Useful Basis for Application Rapid Development',
     'author': 'Allen Gooch',
     'author_email': 'allen.gooch@gmail.com',
     'maintainer': 'Allen Gooch',
@@ -122,7 +122,7 @@ def message(messages, verbose=False):
 class App(object):
     """Application class."""
 
-    def __init__(self):
+    def __init__(self, metadata):
         """Initializes new App object.
 
         The initializer is where additions of actions and options should take place.
@@ -130,10 +130,21 @@ class App(object):
         Make sure to call super() first in your subclass's __init__ method.
 
         """
+        self._metadata = metadata
         self._actions_registry = []
         self._options_registry = []
         self.init_actions()
         self.init_options()
+
+    @property
+    def metadata(self):
+        """Application metadata property.
+
+        :returns: application name
+        :rtype: str
+
+        """
+        return self._metadata
 
     def init_actions(self):
         """Initializes all application actions.
@@ -319,7 +330,7 @@ class App(object):
         :rtype: :class:`argparse.ArgumentParser` object
 
         """
-        parser = argparse.ArgumentParser(description=METADATA['description'])
+        parser = argparse.ArgumentParser(description=self.metadata['description'])
 
         # First, add all global options,
         for name, args, kwargs in self._options_registry:
@@ -433,7 +444,7 @@ class App(object):
         :type others: [str]
 
         """
-        message('{}-{}'.format(METADATA['name'], METADATA['version']))
+        message('{}-{}'.format(self.metadata['name'], self.metadata['version']))
 
 
 class Error(Exception):
@@ -745,18 +756,11 @@ class Options(object):
 
 
 class _FooBarApp(App):
-    """Demonstration application."""
 
     def __init__(self):
-        super(_FooBarApp, self).__init__()
+        super(_FooBarApp, self).__init__(METADATA)
 
     def init_actions(self):
-        """Initializes all application actions.
-
-        All applications must have actions registered to perform any meaningful work.
-        Register them here.
-
-        """
         super(_FooBarApp, self).init_actions()  # let the base application add its own actions
         self.register_action('foo', self._do_foo, "demonstrate a 'foo' action")
         self.register_action('bar', self._do_bar, "demonstrate a 'bar' action", [
@@ -784,8 +788,7 @@ class _FooBarApp(App):
 
 
 def main():
-    app = _FooBarApp()
-    return app.run()
+    return _FooBarApp().run()
 
 
 if __name__ == '__main__':
