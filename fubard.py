@@ -153,7 +153,9 @@ class App(object):
         """
         self.register_action('configure', self._do_configure, 'create or edit configuration file', [
             ('user', ['-u', '--user'], {
-                'help': 'create or edit user configuration file'
+                'help': 'create or edit user configuration file',
+                'action': 'store_true',
+                'default': False
             }),
             ('file', ['-f', '--file'], {
                 'help': 'create or edit specified configuration file'
@@ -187,14 +189,16 @@ class App(object):
         :returns: registered action descriptor
         :rtype: (str, func, help, [(str, [str], {str:str}]
 
+        :raises: KeyError if no action found registered as *name*
+
         """
         exists = [action for action in self._actions_registry if action[0] == name]
         if len(exists) != 1:
-            raise ValueError('unregistered action: {}'.format(name))
+            raise KeyError(name)
         return exists[0]
 
-    def register_action(self, name, func, desc, options=None):
-        """Adds application action descriptor to actions registry.
+    def register_action(self, name, func, desc, option_descriptors=None):
+        """Adds action descriptor to actions registry.
 
         An action descriptor is a tuple of the form (name, function, description, [options])
         where [options] is a list of option descriptors.
@@ -208,14 +212,17 @@ class App(object):
         :param desc: action description
         :type desc: str
 
-        :param options: action option descriptors
-        :type options: [{str:str}]
+        :param option_descriptors: action option descriptors
+        :type option_descriptors: [{str:str}]
 
         """
         exists = [action for action in self._actions_registry if action[0] == name]
         if exists:
             return ValueError("action '{}' already added".format(name))
-        self._actions_registry.append((name, func, desc, options))
+        if option_descriptors is None:
+            option_descriptors = []
+        action_descriptor = (name, func, desc, option_descriptors)
+        self._actions_registry.append(action_descriptor)
 
     def init_options(self):
         """Initializes all application options.
@@ -258,14 +265,16 @@ class App(object):
         :returns: registered option descriptor
         :rtype: (str, func, help, [(str, [str], {str:str}]
 
+        :raises: KeyError if no option found registered as *name*
+
         """
         exists = [option for option in self._options_registry if option[0] == name]
         if len(exists) != 1:
-            raise ValueError('unregistered option: {}'.format(name))
+            raise KeyError(name)
         return exists[0]
 
     def register_option(self, name, args, kwargs):
-        """Adds application option descriptor to options registry.
+        """Adds option descriptor to options registry.
 
         An option descriptor is a tuple of the form (name, [argparse-args], {argparse-kwargs})
 
@@ -304,8 +313,6 @@ class App(object):
             cmdline = cmdline.split()
         try:
             action, options, others = self._parse(cmdline)
-            if not action:
-                raise Error('usage', 'missing action')
             self._dispatch(action, options, others)
             exit_code = 0
         except Error as error:
@@ -323,15 +330,20 @@ class App(object):
         """
         parser = argparse.ArgumentParser(description=self.metadata['description'])
 
-        # First, add all global options
+        # First, add all global options,
         for name, args, kwargs in self._options_registry:
-            kwargs = {k: v for k, v in kwargs.items() if k != 'default'}   # our parser won't be handling the default values
+            kwargs = {k: v for k, v in kwargs.items() if k != 'default'}   # defaults not handled by parser
             parser.add_argument(*args, **kwargs)
 
-        # Next, add a subparser for action on command line, and add all action parsers to it
-        subparsers = parser.add_subparsers(title='available actions')
-        for name, func, desc, options in self._actions_registry:
-            subparsers.add_parser(name, help=desc)
+        # Next, add an actions subparser and add all action parsers to it.
+        actions_subparser = parser.add_subparsers(title='available actions')
+        for name, func, desc, option_descriptors in self._actions_registry:
+            action_parser = actions_subparser.add_parser(name, help=desc)
+            action_parser.set_defaults(action=name)
+            for _, args, kwargs in option_descriptors:
+                kwargs = {k: v for k, v in kwargs.items() if k != 'default'}   # defaults not handled by parser
+                action_parser.add_argument(*args, **kwargs)
+
         return parser
 
     def _parse(self, cmdline):
@@ -353,7 +365,7 @@ class App(object):
         del args['action']
 
         defaults = {}
-        for option_name, option_args, option_kwargs in self._options_registry.items():
+        for option_name, option_args, option_kwargs in self._options_registry:
             defaults[option_name] = option_kwargs['default'] if 'default' in option_kwargs else None
 
         configuration = args['configuration']
@@ -374,14 +386,17 @@ class App(object):
         :type others: [str]
 
         """
-        action = [item for item in self._actions_registry if item[0] == action]
-        if not action:
-            raise Error('usage', 'unknown action: {}'.format(action))
-        if 'verbose' in options:
+        # set the verbosity
+        if 'verbose' in options.values:
             global VERBOSE
-            VERBOSE = options['verbose']
-        action = action[1]
-        action(options)
+            VERBOSE = options.values['verbose']
+        try:
+            action_descriptor = self.get_action(action)
+            func = action_descriptor[1]
+            func(options, others)
+        except ValueError:
+            raise Error('usage', 'unknown action: {}'.format(action))
+
 
     def _do_configure(self, options, others):
         """Configure action handler.
@@ -628,7 +643,7 @@ class Options(object):
         """
         if self._user_options is None:
             location = os.path.expanduser('~/{}'.format(Options.OPTIONS_FILE_NAME))
-            self._user_options = Options.load_options_file(location)
+            self._user_options = Options.load_options_file(location) if os.path.exists(location) else {}
         return dict(self._user_options)
 
     def create_options_file(self, path):
@@ -787,11 +802,14 @@ class _FooBarApp(App):
         message("doing foo action")
 
     def _do_bar(self, options, others):
-        message("doing bar action with baz option '{}'".format(options.values['baz']))
+        try:
+            message("doing bar action with baz option '{}'".format(options.values['baz']))
+        except KeyError:
+            raise Error('usage', "missing 'baz' option")
 
     def _do_hello(self, options, others):
         if len(others) < 1:
-            raise Error('usage', "missing 'who' option")
+            raise Error('usage', "missing name argument")
         message('Hello, {}'.format(others[0]))
 
 
