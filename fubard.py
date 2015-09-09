@@ -14,27 +14,28 @@ This package provides a small number of classes:
 
 Modules using this package are expected to provide:
 
- - a subclass of the :class:`fubard.App` class providing your own application actions and options
- - a main() function creating and running an instance of your application class
- - a test for module being invoked as main that calls your main()
+- a METADATA dictionary containing module information used by setup.py
+- a subclass of the :class:`fubard.App` class providing your own application actions and options
+- a main() function creating and running an instance of your application class
+- a test for the module being invoked as main that calls your main()
 
-A minimal example of this might look like the following:
+A minimal, yet complete, example of this might look like the following:
 
 ::
 
-    class FooBarApp(App):
+    from fubard import App, Error, message
 
-        @property
-        def metadata(self):
-            return {
-                'name': __name__,
-                'version': '1.0.0',
-                'description': 'Demonstration Foo Bar Application',
-                'author': 'John Doe',
-                'author_email': 'john.doe@nonesuch.com',
-                'maintainer': 'Jane Doe',
-                'maintainer_email': 'jane.doe@nonesuch.com'
-            }
+    METADATA = {
+        'name': __name__,
+        'version': '1.0.0',
+        'description': 'Demonstration Foo Bar Application',
+        'author': 'John Doe',
+        'author_email': 'john.doe@nonesuch.com',
+        'maintainer': 'Jane Doe',
+        'maintainer_email': 'jane.doe@nonesuch.com'
+    }
+
+    class FooBarApp(App):
 
         def init_actions(self):
             super(FooBarApp, self).init_actions()  # let the base application add its own actions
@@ -81,6 +82,17 @@ import sys
 import commentjson
 import tabulate
 
+# Package metadata
+METADATA = {
+    'name': __name__,
+    'version': '1.0.0',
+    'description': 'Demonstration b Application',
+    'author': 'Allen Gooch',
+    'author_email': 'allen.gooch@gmail.com',
+    'maintainer': 'Allen Gooch',
+    'maintainer_email': 'allen.gooch@gmail.com'
+}
+
 # TODO(AG): add logging capability
 
 if sys.version_info < (2, 7):
@@ -109,27 +121,6 @@ def message(messages, verbose=False):
 
 class App(object):
     """Application class."""
-
-    @property
-    def metadata(self):
-        """Application metadata property.
-
-        This data is used by the setup.py script and the arguments parser.
-        Subclasses must define this property for their own module.
-
-        :returns: application metadata
-        :rtype: {str:str}
-
-        """
-        return {
-            'name': __name__,
-            'version': '1.0.0',
-            'description': 'Fractionally Useful Boilerplate Application for Rapid Development.',
-            'author': 'Allen Gooch',
-            'author_email': 'allen.gooch@gmail.com',
-            'maintainer': 'Allen Gooch',
-            'maintainer_email': 'allen.gooch@gmail.com'
-        }
 
     def __init__(self):
         """Initializes new App object.
@@ -328,7 +319,7 @@ class App(object):
         :rtype: :class:`argparse.ArgumentParser` object
 
         """
-        parser = argparse.ArgumentParser(description=self.metadata['description'])
+        parser = argparse.ArgumentParser(description=METADATA['description'])
 
         # First, add all global options,
         for name, args, kwargs in self._options_registry:
@@ -442,7 +433,7 @@ class App(object):
         :type others: [str]
 
         """
-        message('{}-{}'.format(self.metadata['name'], self.metadata['version']))
+        message('{}-{}'.format(METADATA['name'], METADATA['version']))
 
 
 class Error(Exception):
@@ -756,27 +747,6 @@ class Options(object):
 class _FooBarApp(App):
     """Demonstration application."""
 
-    @property
-    def metadata(self):
-        """Application metadata property.
-
-        This data is used by the setup.py script and the arguments parser.
-        Subclasses must define this property for their own module.
-
-        :returns: application metadata
-        :rtype: {str:str}
-
-        """
-        return {
-            'name': __name__,
-            'version': '1.0.0',
-            'description': 'Demonstration Foo Bar Application',
-            'author': 'John Doe',
-            'author_email': 'john.doe@nonesuch.com',
-            'maintainer': 'Jane Doe',
-            'maintainer_email': 'jane.doe@nonesuch.com'
-        }
-
     def __init__(self):
         super(_FooBarApp, self).__init__()
 
@@ -810,7 +780,7 @@ class _FooBarApp(App):
     def _do_hello(self, options, others):
         if len(others) < 1:
             raise Error('usage', "missing name argument")
-        message('Hello, {}'.format(others[0]))
+        message('Hello, {}!'.format(others[0]))
 
 
 def main():
