@@ -53,7 +53,7 @@ A minimal, yet complete, example of this might look like the following:
             message("doing foo action")
 
         def _do_bar(self, options, others):
-            message("doing bar action with baz option '{}'".format(options.values['baz']))
+            message("doing bar action with baz option '{}'".format(options['baz']))
 
         def _do_hello(self, options, others):
             if len(others) < 1:
@@ -73,14 +73,9 @@ And that's all it that's required.  Go forth and create command line apps!
 # standard modules
 from __future__ import print_function
 import argparse
-import os
-import subprocess
 import textwrap
 import sys
 
-# vendor modules
-import commentjson
-import tabulate
 
 # Package metadata
 METADATA = {
@@ -153,17 +148,6 @@ class App(object):
         Register them here.
 
         """
-        self.register_action('configure', self._do_configure, 'create or edit configuration file', [
-            ('user', ['-u', '--user'], {
-                'help': 'create or edit user configuration file',
-                'action': 'store_true',
-                'default': False
-            }),
-            ('file', ['-f', '--file'], {
-                'help': 'create or edit specified configuration file'
-            })
-        ])
-        self.register_action('options', self._do_options, 'view options information')
         self.register_action('version', self._do_version, 'view version information')
 
     def is_action(self, name):
@@ -237,10 +221,6 @@ class App(object):
             'help': 'enable verbose output',
             'action': 'store_true',
             'default': False,
-        })
-        self.register_option('configuration', ['-c', '--configuration'], {
-            'help': 'configuration file to use',
-            'metavar': 'FILE'
         })
 
     def is_option(self, name):
@@ -362,17 +342,9 @@ class App(object):
 
         """
         args, others = self._parser.parse_known_args()
-        args = vars(args)
-        action = args['action']
-        del args['action']
-
-        defaults = {}
-        for option_name, option_args, option_kwargs in self._options_registry:
-            defaults[option_name] = option_kwargs['default'] if 'default' in option_kwargs else None
-
-        configuration = args['configuration']
-
-        options = Options(args, defaults, configuration)
+        options = vars(args)
+        action = options['action']
+        del options['action']
         return action, options, others
 
     def _dispatch(self, action, options, others):
@@ -389,48 +361,15 @@ class App(object):
 
         """
         # set the verbosity
-        if 'verbose' in options.values:
+        if 'verbose' in options:
             global VERBOSE
-            VERBOSE = options.values['verbose']
+            VERBOSE = options['verbose']
         try:
             action_descriptor = self.get_action(action)
             func = action_descriptor[1]
             func(options, others)
         except ValueError:
             raise Error('usage', 'unknown action: {}'.format(action))
-
-
-    def _do_configure(self, options, others):
-        """Configure action handler.
-
-        Edits a persistent configuration, creating it on demand.
-
-        :param options: action options
-        :type options: {str:str}
-
-        :param others: action other tokens
-        :type others: [str]
-
-        """
-        editor = options.values['editor'] if 'editor' in options.values else None
-        edit_global = 'global' in options.values and options.values['global']
-        Options.edit_options_file(editor=editor, edit_global=edit_global)
-
-    def _do_options(self, options, others):
-        """Options action handler.
-
-        Displays app options.
-
-        :param options: action options
-        :type options: {str:str}
-
-        :param others: action other tokens
-        :type others: [str]
-
-        """
-        table = sorted(options.items())
-        headers = ['option', 'value']
-        message(tabulate.tabulate(table, headers, tablefmt='psql'))
 
     def _do_version(self, options, others):
         """Version action handler.
@@ -483,278 +422,6 @@ class Error(Exception):
         return result
 
 
-class Options(object):
-    """Application options class.
-
-    Applications utilize flexible configuration options.  The first option is to
-    load all options from a single, specific options file.  The second option
-    is to load and update options from multiple sources:
-
-    - default options
-    - found persistent options
-    - global persistent options
-    - options parsed from command line arguments
-
-    In the second case, options from later sources update previous options.
-
-    """
-
-    #: Options may be persisted in options files.
-    OPTIONS_FILE_NAME = '.{}.json'.format(__name__)
-
-    #: Default text editor
-    DEFAULT_EDITOR = os.environ['EDITOR'] if 'EDITOR' in os.environ else 'vi'
-
-    def __init__(self, args=None, defaults=None, options_file=None, options_text=None,
-                 ignore_defaults=False, ignore_persistent=False):
-        """Initializes new Options object.
-
-        :param args: command line args, if any
-        :type args: {str:str}
-
-        :param defaults: option defaults, if any
-        :type defaults: {str:str}
-
-        :param options_file: path of options file to load
-        :type options_file: str
-
-        :param options_text: text of new configuration options files
-        :type options_text: str
-
-        :param ignore_defaults: ignore default options
-        :type ignore_defaults: bool
-
-        :param ignore_persistent: ignore persistent options
-        :type ignore_persistent: bool
-
-        """
-        self._args_options = args if args is not None else {}
-        self._default_options = defaults
-        self._options_file = options_file
-        self._options_text = options_text
-        self._ignore_defaults = ignore_defaults
-        self._ignore_persistent = ignore_persistent
-
-        # the following attributes are all lazy-loaded on property access
-        self._persistent_options_file = None
-        self._persistent_options = None
-        self._user_options = None
-        self._values = None
-        self._sources = None
-
-    @property
-    def names(self):
-        """Option names property.
-
-        :returns: option names
-        :rtype: [str]
-
-        """
-        return self.defaults.keys()
-
-    @property
-    def values(self):
-        """Option values property.
-
-        :returns: option values
-        :rtype: {str:str}
-
-        """
-        if self._values is None:
-            if self._options_file is not None:
-                self._values = Options.load_options_file(self._options_file)
-            else:
-                options = self.defaults
-                Options.update_options(options, self.user)
-                Options.update_options(options, self.persistent)
-                Options.update_options(options, self.args)
-                self._values = {k: v for k, v in options.items() if v is not None}
-        return self._values
-
-    @property
-    def sources(self):
-        """Option sources property.
-
-        :returns: option sources
-        :rtype: {str:str}
-
-        """
-        if self._sources is None:
-            if self._options_file is not None:
-                self._sources = {k: self._options_file for k in self.values.keys()}
-            else:
-                sources = {k: 'default' for k in self.defaults.keys()}
-                sources.update({k: 'user' for k in self.user.keys()})
-                sources.update({k: self.persistent_options_file for k, v in self.persistent.items() if v is not None})
-                sources.update({k: 'arg' for k, v in self.args.items() if v is not None})
-                self._sources = sources
-        return self._sources
-
-    @property
-    def defaults(self):
-        """Default options property.
-
-        :returns: default options
-        :rtype: {str:str}
-
-        """
-        return self._default_options
-
-    @property
-    def args(self):
-        """Args options property.
-
-        :returns: args options
-        :rtype: {str:str}
-
-        """
-        return dict(self._args_options)
-
-    @property
-    def persistent(self):
-        """Persistent options property.
-
-        :returns: persistent options
-        :rtype: {str:str}
-
-        """
-        if self._persistent_options is None:
-            location = self._persistent_options_file
-            self._persistent_options = Options.load_options_file(location) if location else {}
-        return self._persistent_options
-
-    @property
-    def persistent_options_file(self):
-        """Persistent options file property.
-
-        :returns: persistent options file path
-        :rtype: str
-
-        """
-        if self._persistent_options_file is None:
-            self._persistent_options_file = Options.find_options_file()
-        return self._persistent_options_file
-
-    @property
-    def user(self):
-        """User options property.
-
-        :returns: args options
-        :rtype: {str:str}
-
-        """
-        if self._user_options is None:
-            location = os.path.expanduser('~/{}'.format(Options.OPTIONS_FILE_NAME))
-            self._user_options = Options.load_options_file(location) if os.path.exists(location) else {}
-        return dict(self._user_options)
-
-    def create_options_file(self, path):
-        """Creates options file at *path*.
-
-        :param path: options file path
-        :type path: str
-
-        """
-        if not os.path.exists(path):
-            with open(path, 'w') as outfile:
-                outfile.write(self._options_text)
-            message('created new configuration: {}'.format(path), verbose=True)
-
-    @staticmethod
-    def edit_options_file(self, path=None, editor=None, edit_global=False):
-        """Edit options file at *path*.
-
-        :param path: options file path
-        :type path: str
-
-        :param editor: editor command to use
-        :type editor: str
-
-        :param edit_global: edit the global options file
-        :type edit_global: bool
-
-        """
-        if editor is None:
-            editor = Options.DEFAULT_EDITOR
-
-        if edit_global:
-            filename = os.path.expanduser('~/{}'.format(Options.OPTIONS_FILE_NAME))
-        elif path is None:
-            filename = Options.find_options_file()
-        else:
-            filename = path
-
-        try:
-            if not os.path.exists(filename):
-                self.create_options_file(filename)
-            subprocess.call([editor, filename])
-        except Exception as error:
-            raise Error('exec', 'cannot launch editor: {}'.format(error))
-
-    @staticmethod
-    def load_options_file(path):
-        """Loads options from file at *path*.
-
-        :param path: options file path
-        :type path: str
-
-        :returns: loaded options
-        :rtype: {str:str}
-
-        """
-        try:
-            with open(path) as infile:
-                text = infile.readlines()
-            return commentjson.loads(text)
-        except Exception as error:
-            raise Error('load', 'cannot load options file {}: {}'.format(path, error))
-
-    @staticmethod
-    def find_options_file(path=None):
-        """Locates options file.
-
-        The search will start at the current working directory, and will continue to
-        search up through all successive parent directories until no more parent
-        directories remain.  The first options file found will be returned.
-
-        :param path: path of directory to start search in
-        :type path: str
-
-        :returns: options file path if exists, otherwise None
-        :rtype: str|None
-
-        """
-        # find all candidate directories
-        if path is None:
-            path = os.path.expanduser('~')
-        search_dirs = [path]
-        parts = os.getcwd().split('/')[1:]
-        for i, part in enumerate(parts):
-            search_dirs.append(os.path.join('/', *parts[:i+1]))
-
-        # search candidate directories for options files
-        for search_dir in reversed(search_dirs):
-            options_file = os.path.join(search_dir, Options.OPTIONS_FILE_NAME)
-            if os.path.exists(options_file):
-                return options_file  # Success!
-        return None  # Failure!
-
-    @staticmethod
-    def update_options(options, new):
-        """Updates values in *options* with those found in *new*.
-
-        :param options: options to be updated dictionary
-        :type options: {str:str}
-
-        :param new: new, updated options dictionary
-        :type new: {str:str}
-
-        """
-        for k, v in new.items():
-            if v is not None:
-                options[k] = v
-
-
 class _FooBarApp(App):
 
     def __init__(self):
@@ -777,7 +444,7 @@ class _FooBarApp(App):
 
     def _do_bar(self, options, others):
         try:
-            message("doing bar action with baz option '{}'".format(options.values['baz']))
+            message("doing bar action with baz option '{}'".format(options['baz']))
         except KeyError:
             raise Error('usage', "missing 'baz' option")
 
